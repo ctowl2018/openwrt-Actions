@@ -1,0 +1,299 @@
+#!/bin/sh
+
+# sed -i 's/\r$//' openclash2.sh
+#uci-defaults文件
+# ==================== 1. 配置网络接口（基础网络架构） ====================
+logger -t UCI_INIT "===== 开始执行 [1/12] 网络接口配置 ====="
+
+# 清除所有匿名 device 节（从后往前删，避免索引漂移）
+while uci -q show network.@device[-1] >/dev/null 2>&1; do
+    uci delete network.@device[-1]
+done
+
+# 桥接设备（命名节）
+uci set network.br_lan=device
+uci set network.br_lan.type='bridge'
+uci set network.br_lan.name='br-lan'
+uci -q delete network.br_lan.ports
+uci add_list network.br_lan.ports='eth0'
+uci add_list network.br_lan.ports='eth1'
+
+# 物理设备 MAC 地址（命名节，不再依赖索引）
+uci set network.dev_eth0=device
+uci set network.dev_eth0.name='eth0'
+uci set network.dev_eth0.macaddr='36:df:38:f6:9f:81'
+
+uci set network.dev_eth1=device
+uci set network.dev_eth1.name='eth1'
+uci set network.dev_eth1.macaddr='36:df:38:f6:9f:81'
+
+uci set network.dev_eth2=device
+uci set network.dev_eth2.name='eth2'
+uci set network.dev_eth2.macaddr='36:df:38:f6:9f:82'
+
+uci set network.dev_eth3=device
+uci set network.dev_eth3.name='eth3'
+uci set network.dev_eth3.macaddr='00:E0:4C:36:00:60'
+
+# WAN
+uci set network.wan.device='eth2'
+uci set network.wan.proto='dhcp'
+uci set network.wan.metric='2'
+
+# WAN6
+uci set network.wan6.device='eth2'
+uci set network.wan6.proto='dhcpv6'
+uci set network.wan6.reqaddress='try'
+uci set network.wan6.reqprefix='auto'
+uci set network.wan6.norelease='1'
+uci set network.wan6.metric='2'
+
+# LAN
+uci set network.lan.device='br-lan'
+uci set network.lan.proto='static'
+uci set network.lan.ipaddr='10.9.9.1'
+uci set network.lan.netmask='255.255.255.0'
+uci set network.lan.ip6assign='60'
+uci set network.globals.ula_prefix='fd00:ab:cd::/48'
+uci set network.globals.packet_steering='1'
+
+# IPTV
+uci set network.IPTV=interface
+uci set network.IPTV.proto='static'
+uci set network.IPTV.device='eth3'
+uci set network.IPTV.ipaddr='192.168.1.9'
+uci set network.IPTV.netmask='255.255.255.0'
+uci set network.IPTV.defaultroute='0'
+uci set network.IPTV.metric='9'
+
+uci set network.lan.multipath='off'
+uci set network.docker.multipath='off'
+uci set network.IPTV.multipath='off'
+uci set network.wan6.multipath='off'
+uci set network.wan.multipath='off'
+uci set dhcp.lan.ra_preference='medium'
+uci commit network
+logger -t UCI_INIT "===== [1/12] 网络接口配置完成 ====="
+
+
+# ==================== 2. 配置DHCP服务 ====================
+logger -t UCI_INIT "===== 开始执行 [2/12] DHCP服务配置 ====="
+
+uci -q delete dhcp.lan.ra_slaac
+uci -q delete dhcp.lan.dhcpv6
+uci set dhcp.lan.force='1'
+uci set dhcp.lan.ra='server'
+
+uci -q delete dhcp.@dnsmasq[0].dns_redirect
+uci -q delete dhcp.@dnsmasq[0].filter_aaaa
+
+uci -q add dhcp host >/dev/null
+uci set dhcp.@host[-1].name='BE3600'
+uci set dhcp.@host[-1].dns='1'
+uci set dhcp.@host[-1].mac='4C:C6:4C:4F:44:7C'
+uci set dhcp.@host[-1].ip='10.9.9.2'
+uci set dhcp.@host[-1].leasetime='infinite'
+
+uci -q add dhcp host >/dev/null
+uci set dhcp.@host[-1].name='BE3600-2'
+uci set dhcp.@host[-1].dns='1'
+uci set dhcp.@host[-1].mac='50:4F:3B:02:18:EC'
+uci set dhcp.@host[-1].ip='10.9.9.3'
+uci set dhcp.@host[-1].leasetime='infinite'
+
+uci -q add dhcp host >/dev/null
+uci set dhcp.@host[-1].name='Gate'
+uci set dhcp.@host[-1].dns='1'
+uci set dhcp.@host[-1].mac='78:DF:72:BC:D9:C1'
+uci set dhcp.@host[-1].ip='10.9.9.8'
+uci set dhcp.@host[-1].leasetime='infinite'
+
+uci -q add dhcp host >/dev/null
+uci set dhcp.@host[-1].name='ViddaX75'
+uci set dhcp.@host[-1].dns='1'
+uci set dhcp.@host[-1].mac='A0:00:4C:B0:17:48'
+uci set dhcp.@host[-1].ip='10.9.9.75'
+uci set dhcp.@host[-1].leasetime='infinite'
+
+uci commit dhcp
+logger -t UCI_INIT "===== [2/12] DHCP服务配置完成 ====="
+
+
+# ==================== 3. 配置SSH服务 ====================
+logger -t UCI_INIT "===== 开始执行 [3/12] SSH服务配置 ====="
+
+uci -q delete dropbear.@dropbear[0]
+uci -q add dropbear dropbear >/dev/null
+uci set dropbear.@dropbear[-1].PasswordAuth='on'
+
+uci commit dropbear
+logger -t UCI_INIT "===== [3/12] SSH服务配置完成 ====="
+
+# ==================== 4. 配置DDNS服务 ====================
+#转入本地执行
+
+# ==================== 5. 配置防火墙 ====================
+logger -t UCI_INIT "===== 开始执行 [5/12] 防火墙配置 ====="
+
+uci -q delete firewall.@defaults[0].syn_flood
+uci set firewall.@defaults[0].synflood_protect='1'
+uci set firewall.@defaults[0].input='ACCEPT'
+uci set firewall.@defaults[0].flow_offloading='1'
+uci set firewall.@defaults[0].flow_offloading_hw='1'
+uci set firewall.@zone[1].input='ACCEPT'
+uci delete firewall.@defaults[0].fullcone6
+uci commit firewall
+logger -t UCI_INIT "===== [5/12] 防火墙配置完成 ====="
+
+
+# ==================== 6. 配置 msd_lite ====================
+logger -t UCI_INIT "===== 开始执行 [6/12] msd_lite配置 ====="
+
+uci -q delete msd_lite.@instance[-1].bind_to_cpu
+uci -q delete msd_lite.@instance[-1].drop_slow_clients
+
+uci set msd_lite.@instance[-1].enabled='1'
+
+uci -q delete msd_lite.@instance[-1].address
+uci add_list msd_lite.@instance[-1].address='0.0.0.0:5000'
+uci add_list msd_lite.@instance[-1].address='[::]:5000'
+
+uci set msd_lite.@instance[-1].network='IPTV'
+uci set msd_lite.@instance[-1].threads='0'
+uci set msd_lite.@instance[-1].precache_size='4096'
+uci set msd_lite.@instance[-1].ring_buffer_size='1024'
+uci set msd_lite.@instance[-1].multicast_recv_buffer_size='512'
+uci set msd_lite.@instance[-1].multicast_recv_timeout='2'
+uci set msd_lite.@instance[-1].rejoin_time='0'
+uci set msd_lite.@instance[-1].loglevel='0'
+
+uci commit msd_lite
+logger -t UCI_INIT "===== [6/12] msd_lite配置完成 ====="
+
+# ==================== 7. 配置 Frpc ====================
+
+#转入本地执行
+
+# ==================== 8. 配置 uhttpd + PHP ====================
+logger -t UCI_INIT "===== 开始执行 [8/12] uhttpd + PHP配置 ====="
+
+uci -q delete uhttpd.main
+uci -q delete uhttpd.WRT
+uci -q delete uhttpd.defaults
+
+# 主实例
+uci set uhttpd.main=uhttpd
+uci add_list uhttpd.main.listen_http='0.0.0.0:80'
+uci add_list uhttpd.main.listen_http='[::]:80'
+uci add_list uhttpd.main.listen_https='0.0.0.0:443'
+uci add_list uhttpd.main.listen_https='[::]:443'
+uci set uhttpd.main.redirect_https='0'
+uci set uhttpd.main.home='/mnt/nvme0n1p1/www/'
+# 主实例CA证书
+#转入本地执行
+uci set uhttpd.main.rfc1918_filter='1'
+uci set uhttpd.main.max_requests='3'
+uci set uhttpd.main.max_connections='100'
+uci set uhttpd.main.script_timeout='360'
+uci set uhttpd.main.network_timeout='30'
+uci set uhttpd.main.http_keepalive='20'
+uci set uhttpd.main.tcp_keepalive='1'
+uci set uhttpd.main.no_dirlists='1'
+uci set uhttpd.main.error_page='/404.html'
+uci add_list uhttpd.main.interpreter='.php=/usr/bin/php8-cgi'
+
+# 证书模板
+uci set uhttpd.defaults=cert
+uci set uhttpd.defaults.days='397'
+uci set uhttpd.defaults.key_type='ec'
+uci set uhttpd.defaults.bits='2048'
+uci set uhttpd.defaults.ec_curve='P-256'
+uci set uhttpd.defaults.country='CN'
+uci set uhttpd.defaults.state='Somewhere'
+uci set uhttpd.defaults.location='Anhui'
+uci set uhttpd.defaults.commonname='ImmortalWrt'
+
+# WRT 实例（LuCI）
+uci set uhttpd.WRT=uhttpd
+uci add_list uhttpd.WRT.listen_http='0.0.0.0:8010'
+uci add_list uhttpd.WRT.listen_http='[::]:8010'
+uci set uhttpd.WRT.redirect_https='0'
+uci set uhttpd.WRT.home='/www'
+uci set uhttpd.WRT.rfc1918_filter='1'
+uci set uhttpd.WRT.max_requests='3'
+uci set uhttpd.WRT.max_connections='100'
+uci set uhttpd.WRT.cgi_prefix='/cgi-bin'
+uci set uhttpd.WRT.script_timeout='360'
+uci set uhttpd.WRT.network_timeout='30'
+uci set uhttpd.WRT.http_keepalive='20'
+uci set uhttpd.WRT.tcp_keepalive='1'
+uci set uhttpd.WRT.ubus_prefix='/ubus'
+uci set uhttpd.WRT.lua_prefix='/cgi-bin/luci=/usr/lib/lua/luci/sgi/uhttpd.lua'
+
+uci commit uhttpd
+
+# PHP 配置
+PHP_INI="/etc/php.ini"
+if [ -f "$PHP_INI" ]; then
+    sed -i '/^doc_root = "\/www"/s/^/;/' "$PHP_INI"
+    sed -i '/^;short_open_tag\s*=\s*Off/s/^;//' "$PHP_INI"
+    sed -i '/^memory_limit\s*=\s*8M/s/8M/32M/' "$PHP_INI"
+    sed -i '/^;memory_limit\s*=\s*8M/ { s/^;//; s/8M/32M/ }' "$PHP_INI"
+fi
+
+logger -t UCI_INIT "===== [8/12] uhttpd + PHP配置完成 ====="
+
+
+# ==================== 9. 配置 Samba4 ====================
+logger -t UCI_INIT "===== 开始执行 [9/12] Samba4配置 ====="
+
+uci -q add samba4 sambashare >/dev/null
+uci set samba4.@sambashare[-1].name='Nas'
+uci set samba4.@sambashare[-1].path='/mnt/nvme0n1p1'
+uci set samba4.@sambashare[-1].read_only='no'
+uci set samba4.@sambashare[-1].users='root'
+uci set samba4.@sambashare[-1].guest_ok='no'
+uci set samba4.@sambashare[-1].create_mask='0666'
+uci set samba4.@sambashare[-1].dir_mask='0777'
+uci set samba4.@samba[0].enable_extra_tuning='1'
+uci set samba4.@samba[0].disable_async_io='1'
+uci commit samba4
+
+if [ -f /etc/samba/smb.conf.template ]; then
+    sed -i -E 's/^([[:space:]]*)invalid users = root/\1## invalid users = root/' /etc/samba/smb.conf.template
+fi
+
+logger -t UCI_INIT "===== [9/12] Samba4配置完成 ====="
+
+
+# ==================== 10. 配置 filebrowser ====================
+logger -t UCI_INIT "===== 开始执行 [10/12] filebrowser配置 ====="
+
+uci set filebrowser.config.enabled='1'
+uci set filebrowser.config.listen_port='8000'
+uci commit filebrowser
+logger -t UCI_INIT "===== [10/12] filebrowser配置完成 ====="
+
+# ==================== 11. 配置匿名挂载 ====================
+uci set fstab.@global[0].anon_mount='1'
+uci commit fstab
+# =================== 12. 配置 Docker 数据目录 ====================
+#uci set dockerd.@globals[0].data_root='/mnt/nvme0n1p1/opt/docker_root'
+#uci commit dockerd
+
+uci commit
+
+# ==================== 12. 定时任务/系统自动化 ====================
+
+chmod +x /usr/bin/Ty_Reboot.sh 2>/dev/null
+chmod +x /usr/bin/ipv6check.sh 2>/dev/null
+chmod +x /usr/bin/myset_cron.sh 2>/dev/null
+# 添加定时任务到root用户的crontab：
+# 1. 每2天凌晨4点20分执行路由器重启脚本（Ty_Reboot.sh）
+# 2. 每小时30分执行IPv6连通性检查脚本（ipv6check.sh）
+echo "20 4 */2 * * sh /usr/bin/Ty_Reboot.sh" >> /etc/crontabs/root
+echo "30 * * * * sh /usr/bin/ipv6check.sh" >> /etc/crontabs/root
+echo "*/1 * * * * /usr/bin/myset_cron.sh" >> /etc/crontabs/root
+logger -t UCI_INIT "===== 全部配置完成，共 12 个模块 ====="
+
+exit 0

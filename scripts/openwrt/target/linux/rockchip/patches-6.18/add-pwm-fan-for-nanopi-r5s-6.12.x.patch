@@ -1,0 +1,60 @@
+--- a/arch/arm64/boot/dts/rockchip/rk3568-nanopi-r5s.dtsi
++++ b/arch/arm64/boot/dts/rockchip/rk3568-nanopi-r5s.dtsi
+@@ -34,6 +34,19 @@
+ 			};
+ 		};
+ 	};
++
++/* PWM controlled fan */
++fan: pwm-fan {
++	compatible = "pwm-fan";
++	cooling-levels = <0 18 102 170 255>;
++	#cooling-cells = <2>;
++	cooling-min-state = <0>;
++	cooling-max-state = <4>;
++	fan-supply = <&vcc5v0_sys>;
++	/* use pwm0, 50 kHz period */
++	pwms = <&pwm0 0 50000 0>;
++};
++
+ 
+ 	vdd_usbc: vdd-usbc-regulator {
+ 		compatible = "regulator-fixed";
+@@ -588,3 +601,37 @@
+ 		remote-endpoint = <&hdmi_in_vp0>;
+ 	};
+ };
++
++
++&pwm0 {
++	status = "okay";
++};
++
++/* CPU thermal control and fan cooling maps */
++&cpu_thermal {
++	trips {
++		cpu_warm: cpu_warm {
++			temperature = <55000>;
++			hysteresis = <2000>;
++			type = "active";
++		};
++
++		cpu_hot: cpu_hot {
++			temperature = <65000>;
++			hysteresis = <2000>;
++			type = "active";
++		};
++	};
++
++	cooling-maps {
++		map2 {
++			trip = <&cpu_warm>;
++			cooling-device = <&fan THERMAL_NO_LIMIT 1>;
++		};
++
++		map3 {
++			trip = <&cpu_hot>;
++			cooling-device = <&fan 2 THERMAL_NO_LIMIT>;
++		};
++	};
++};
